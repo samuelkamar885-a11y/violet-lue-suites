@@ -64,7 +64,7 @@ function showMessage($title, $message, $success = false)
         <div class="message">
             <h1>' . htmlspecialchars($title) . '</h1>
             <p>' . nl2br(htmlspecialchars($message)) . '</p>
-            <a href="../pages/reservations.html">Return to Reservations</a>
+            <a href="../pages/reservations.php">Return to Reservations</a>
         </div>
     </body>
     </html>';
