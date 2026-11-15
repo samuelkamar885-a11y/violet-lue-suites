@@ -220,10 +220,7 @@ require_once __DIR__ . '/includes/website_settings.php';
                 </div>
 
                 <form action="pages/reservations.php" method="GET">
-                    <button type="submit" class="availability-btn">
-    <i class="fas fa-search"></i>
-    Check Availability
-</button>
+                    
 
                     <div class="form-group">
 
