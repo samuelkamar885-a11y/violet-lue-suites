@@ -316,10 +316,10 @@ require_once __DIR__ . '/includes/website_settings.php';
             <p>Secure<br>Parking</p>
         </div>
 
-        <div class="facility-item">>
-            <i class="fas fa-utensils"></i>
-            <p>Restaurant &<br>Dining</p>
-        </div>
+        <div class="facility-item">
+    <i class="fas fa-smoking-ban"></i>
+    <p>No Smoking<br>In Rooms</p>
+</div>
 
         <div class="facility-item">
             <i class="fas fa-shield-alt"></i>
