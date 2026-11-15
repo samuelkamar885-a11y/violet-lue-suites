@@ -17,7 +17,7 @@ function showMessage($title, $message, $success = false)
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>' . htmlspecialchars($title) . '</title>
+        <title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title>
 
         <style>
             body {
@@ -62,8 +62,8 @@ function showMessage($title, $message, $success = false)
 
     <body>
         <div class="message">
-            <h1>' . htmlspecialchars($title) . '</h1>
-            <p>' . nl2br(htmlspecialchars($message)) . '</p>
+            <h1>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1>
+            <p>' . nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8')) . '</p>
             <a href="../pages/reservations.php">Return to Reservations</a>
         </div>
     </body>
@@ -159,6 +159,7 @@ if (!validDate($checkIn) || !validDate($checkOut)) {
     );
 }
 
+// Check-out must be after check-in
 if ($checkOut <= $checkIn) {
     showMessage(
         'Invalid Dates',
@@ -166,8 +167,16 @@ if ($checkOut <= $checkIn) {
     );
 }
 
+// Check-in cannot be in the past
+if ($checkIn < date('Y-m-d')) {
+    showMessage(
+        'Invalid Check-in Date',
+        'Check-in date cannot be in the past.'
+    );
+}
+
 // Validate number of guests
-if (!$guests || $guests < 1) {
+if ($guests === false || $guests < 1) {
     showMessage(
         'Invalid Guests',
         'Please select a valid number of guests.'
@@ -217,12 +226,17 @@ if (strlen($specialRequests) > 5000) {
 
 try {
 
-    // Start database transaction
+    /*
+    |--------------------------------------------------------------------------
+    | STEP 1: Start Database Transaction
+    |--------------------------------------------------------------------------
+    */
+
     $pdo->beginTransaction();
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 1: Find Existing Guest
+    | STEP 2: Find Existing Guest
     |--------------------------------------------------------------------------
     */
 
@@ -243,20 +257,20 @@ try {
         ':phone' => $phone
     ]);
 
-    $matchedGuests = $guestStmt->fetchAll();
+    $matchedGuests = $guestStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Collect unique matching guest IDs
     $matchedGuestIds = [];
 
     foreach ($matchedGuests as $matchedGuest) {
-        $matchedGuestIds[] = (int)$matchedGuest['id'];
+        $matchedGuestIds[] = (int) $matchedGuest['id'];
     }
 
     $matchedGuestIds = array_unique($matchedGuestIds);
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 2: Check for Conflicting Guest Records
+    | STEP 3: Check for Conflicting Guest Records
     |--------------------------------------------------------------------------
     */
 
@@ -272,22 +286,19 @@ try {
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 3: Reuse or Create Guest
+    | STEP 4: Reuse or Create Guest
     |--------------------------------------------------------------------------
     */
 
     if (count($matchedGuestIds) === 1) {
 
-        /*
-         * EXISTING GUEST FOUND
-         */
-
-        $guestId = (int)reset($matchedGuestIds);
+        // Existing guest found
+        $guestId = (int) reset($matchedGuestIds);
 
         // Use the official registered guest information
         foreach ($matchedGuests as $matchedGuest) {
 
-            if ((int)$matchedGuest['id'] === $guestId) {
+            if ((int) $matchedGuest['id'] === $guestId) {
 
                 $fullName = $matchedGuest['full_name'];
                 $email = $matchedGuest['email'];
@@ -299,15 +310,11 @@ try {
 
     } else {
 
-        /*
-         * NEW GUEST
-         */
+        // New guest
 
-        // Generate unique guest reference
         $guestReference = 'VLG-' . date('Ymd') . '-' .
             strtoupper(bin2hex(random_bytes(4)));
 
-        // Register new guest
         $insertGuest = $pdo->prepare("
             INSERT INTO guests (
                 guest_reference,
@@ -329,13 +336,12 @@ try {
             ':phone' => $phone
         ]);
 
-        // Get newly created guest ID
-        $guestId = (int)$pdo->lastInsertId();
+        $guestId = (int) $pdo->lastInsertId();
     }
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 4: Generate Booking Reference
+    | STEP 5: Generate Booking Reference
     |--------------------------------------------------------------------------
     */
 
@@ -344,12 +350,8 @@ try {
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 5: Save Reservation
+    | STEP 6: Save Reservation
     |--------------------------------------------------------------------------
-    |
-    | Existing guest details are now synchronized.
-    | The reservation receives the correct guest_id.
-    |
     */
 
     $sql = "
@@ -395,29 +397,373 @@ try {
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 6: Commit Transaction
+    | STEP 7: Commit Database Transaction
     |--------------------------------------------------------------------------
+    |
+    | The reservation is now safely stored.
+    | Email delivery happens after this point.
+    |
     */
 
     $pdo->commit();
 
     /*
     |--------------------------------------------------------------------------
-    | STEP 7: Display Success
+    | STEP 8: Send Reservation Acknowledgement Email
+    |--------------------------------------------------------------------------
+    |
+    | This email informs the guest that the request was received.
+    | It does NOT mean the reservation is confirmed.
+    |
+    */
+
+    $emailSent = false;
+
+    try {
+
+        // Load the email helper if it exists
+        $mailerFile = __DIR__ . '/../includes/mailer.php';
+
+        if (!file_exists($mailerFile)) {
+            throw new RuntimeException(
+                'Email helper file was not found.'
+            );
+        }
+
+        require_once $mailerFile;
+
+        if (!function_exists('sendHotelEmail')) {
+            throw new RuntimeException(
+                'The sendHotelEmail function is unavailable.'
+            );
+        }
+
+        // Format room name
+        $roomName = $roomType === 'luxury-room'
+            ? 'Luxury Room'
+            : 'Self-Contained Apartment';
+
+        // Safely prepare HTML email values
+        $safeName = htmlspecialchars(
+            $fullName,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $safeReference = htmlspecialchars(
+            $bookingReference,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $safeRoom = htmlspecialchars(
+            $roomName,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $safeCheckIn = htmlspecialchars(
+            $checkIn,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $safeCheckOut = htmlspecialchars(
+            $checkOut,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        $safeGuests = htmlspecialchars(
+            (string) $guests,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Email Subject
+        |--------------------------------------------------------------------------
+        */
+
+        $subject = 'Reservation Request Received - ' .
+            $bookingReference;
+
+        /*
+        |--------------------------------------------------------------------------
+        | HTML Email
+        |--------------------------------------------------------------------------
+        */
+
+        $htmlBody = '
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Reservation Received</title>
+        </head>
+
+        <body style="
+            margin:0;
+            padding:25px;
+            background:#f8f5fa;
+            font-family:Arial,sans-serif;
+            color:#333;
+        ">
+
+            <div style="
+                max-width:600px;
+                margin:auto;
+                background:#ffffff;
+                border-radius:12px;
+                overflow:hidden;
+                box-shadow:0 5px 20px rgba(0,0,0,0.08);
+            ">
+
+                <div style="
+                    background:#4B006E;
+                    padding:30px 20px;
+                    text-align:center;
+                    color:#ffffff;
+                ">
+
+                    <h1 style="margin:0;">
+                        VIOLET-LUE
+                    </h1>
+
+                    <p style="margin:8px 0 0;">
+                        SUITES &amp; APARTMENTS
+                    </p>
+
+                </div>
+
+                <div style="padding:30px;">
+
+                    <h2 style="color:#4B006E;">
+                        Reservation Request Received!
+                    </h2>
+
+                    <p>
+                        Dear ' . $safeName . ',
+                    </p>
+
+                    <p>
+                        Thank you for choosing
+                        <strong>VIOLET-LUE SUITES &amp; APARTMENTS</strong>.
+                    </p>
+
+                    <p>
+                        We have successfully received your reservation request.
+                        Our team will review your booking and contact you
+                        regarding confirmation.
+                    </p>
+
+                    <div style="
+                        background:#fff8e7;
+                        border-left:4px solid #c49a42;
+                        padding:15px;
+                        margin:20px 0;
+                    ">
+
+                        <strong>Reservation Status:</strong>
+
+                        <span style="
+                            color:#b7791f;
+                            font-weight:bold;
+                        ">
+                            PENDING CONFIRMATION
+                        </span>
+
+                    </div>
+
+                    <h3 style="color:#4B006E;">
+                        Your Reservation Details
+                    </h3>
+
+                    <table style="
+                        width:100%;
+                        border-collapse:collapse;
+                    ">
+
+                        <tr>
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                Booking Reference
+                            </td>
+
+                            <td style="
+                                padding:10px;
+                                border-bottom:1px solid #eee;
+                                font-weight:bold;
+                            ">
+                                ' . $safeReference . '
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                Accommodation
+                            </td>
+
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                ' . $safeRoom . '
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                Check-in
+                            </td>
+
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                ' . $safeCheckIn . '
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                Check-out
+                            </td>
+
+                            <td style="padding:10px;border-bottom:1px solid #eee;">
+                                ' . $safeCheckOut . '
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding:10px;">
+                                Number of Guests
+                            </td>
+
+                            <td style="padding:10px;">
+                                ' . $safeGuests . '
+                            </td>
+                        </tr>
+
+                    </table>
+
+                    <p style="margin-top:25px;">
+                        Please keep your booking reference for future
+                        communication with our team.
+                    </p>
+
+                    <p>
+                        We look forward to welcoming you.
+                    </p>
+
+                    <p>
+                        Kind regards,<br>
+                        <strong>VIOLET-LUE SUITES &amp; APARTMENTS</strong>
+                    </p>
+
+                </div>
+
+                <div style="
+                    background:#f3edf6;
+                    padding:18px;
+                    text-align:center;
+                    font-size:13px;
+                    color:#666;
+                ">
+                    Thank you for choosing VIOLET-LUE.
+                    <br>
+                    This is an automated acknowledgement email.
+                </div>
+
+            </div>
+
+        </body>
+        </html>
+        ';
+
+        /*
+        |--------------------------------------------------------------------------
+        | Plain Text Email
+        |--------------------------------------------------------------------------
+        */
+
+        $plainBody =
+            "Dear {$fullName},\n\n" .
+            "Thank you for choosing VIOLET-LUE SUITES & APARTMENTS.\n\n" .
+            "We have received your reservation request.\n" .
+            "Your reservation is currently PENDING CONFIRMATION.\n\n" .
+            "Booking Reference: {$bookingReference}\n" .
+            "Accommodation: {$roomName}\n" .
+            "Check-in: {$checkIn}\n" .
+            "Check-out: {$checkOut}\n" .
+            "Guests: {$guests}\n\n" .
+            "Our team will contact you regarding confirmation.\n\n" .
+            "Kind regards,\n" .
+            "VIOLET-LUE SUITES & APARTMENTS";
+
+        /*
+        |--------------------------------------------------------------------------
+        | Send Email
+        |--------------------------------------------------------------------------
+        */
+
+        $emailSent = sendHotelEmail(
+            $email,
+            $fullName,
+            $subject,
+            $htmlBody,
+            $plainBody
+        );
+
+        if (!$emailSent) {
+            error_log(
+                'Reservation acknowledgement email was not sent for booking: ' .
+                $bookingReference
+            );
+        }
+
+    } catch (Throwable $mailError) {
+
+        // Email problems must not undo a saved reservation
+        error_log(
+            'Reservation acknowledgement email error for ' .
+            $bookingReference . ': ' .
+            $mailError->getMessage()
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | STEP 9: Display Reservation Result
     |--------------------------------------------------------------------------
     */
 
+    $successMessage =
+        'Your reservation request has been received. ' .
+        'Your booking reference is: ' . $bookingReference . '. ' .
+        'Your reservation is currently pending confirmation.';
+
+    if ($emailSent) {
+
+        $successMessage .=
+            ' An acknowledgement email has been sent to your email address.';
+
+    } else {
+
+        $successMessage .=
+            ' However, we could not send the acknowledgement email at this time. ' .
+            'Please keep your booking reference for future communication.';
+    }
+
     showMessage(
         'Reservation Submitted Successfully!',
-        'Your reservation request has been received. Your booking reference is: ' .
-        $bookingReference .
-        '. Your reservation is pending confirmation.',
+        $successMessage,
         true
     );
 
 } catch (Throwable $e) {
 
-    // Roll back incomplete database operations
+    /*
+    |--------------------------------------------------------------------------
+    | STEP 10: Handle Database Errors
+    |--------------------------------------------------------------------------
+    */
+
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
     }

@@ -191,6 +191,11 @@ require_once __DIR__ . '/../includes/website_settings.php';
             color: #251333;
         }
 
+        .reservation-submit:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
         .reservation-notice {
             grid-column: 1 / -1;
             background: #fff8e8;
@@ -199,6 +204,20 @@ require_once __DIR__ . '/../includes/website_settings.php';
             color: #66532d;
             font-size: 13px;
             line-height: 1.7;
+        }
+
+        .reservation-email-notice {
+            grid-column: 1 / -1;
+            background: #f0eaf6;
+            border-left: 4px solid #351653;
+            padding: 14px;
+            color: #351653;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .reservation-email-notice i {
+            margin-right: 6px;
         }
 
         @media (max-width: 768px) {
@@ -223,7 +242,8 @@ require_once __DIR__ . '/../includes/website_settings.php';
 
             .form-group.full-width,
             .reservation-submit,
-            .reservation-notice {
+            .reservation-notice,
+            .reservation-email-notice {
                 grid-column: auto;
             }
         }
@@ -352,10 +372,12 @@ require_once __DIR__ . '/../includes/website_settings.php';
                     are required.
                 </p>
 
-                <form action="../backend/process_reservation.php"
-      method="POST"
-      id="reservationForm"
-      class="reservation-form">
+                <form
+                    action="../backend/process_reservation.php"
+                    method="POST"
+                    id="reservationForm"
+                    class="reservation-form"
+                >
 
                     <div class="form-group full-width">
                         <label for="room_type">Accommodation Type *</label>
@@ -371,14 +393,22 @@ require_once __DIR__ . '/../includes/website_settings.php';
 
                     <div class="form-group">
                         <label for="check_in">Check-in Date *</label>
-                        <input type="date" id="check_in"
-                            name="check_in" required>
+                        <input
+                            type="date"
+                            id="check_in"
+                            name="check_in"
+                            required
+                        >
                     </div>
 
                     <div class="form-group">
                         <label for="check_out">Check-out Date *</label>
-                        <input type="date" id="check_out"
-                            name="check_out" required>
+                        <input
+                            type="date"
+                            id="check_out"
+                            name="check_out"
+                            required
+                        >
                     </div>
 
                     <div class="form-group">
@@ -397,47 +427,71 @@ require_once __DIR__ . '/../includes/website_settings.php';
 
                     <div class="form-group">
                         <label for="full_name">Full Name *</label>
-                        <input type="text" id="full_name"
+                        <input
+                            type="text"
+                            id="full_name"
                             name="full_name"
                             maxlength="150"
                             placeholder="Enter your full name"
-                            autocomplete="name" required>
+                            autocomplete="name"
+                            required
+                        >
                     </div>
 
                     <div class="form-group">
                         <label for="email">Email Address *</label>
-                        <input type="email" id="email"
+                        <input
+                            type="email"
+                            id="email"
                             name="email"
                             maxlength="150"
                             placeholder="Enter your email"
-                            autocomplete="email" required>
+                            autocomplete="email"
+                            required
+                        >
                     </div>
 
                     <div class="form-group">
                         <label for="phone">Phone Number *</label>
-                        <input type="tel" id="phone"
+                        <input
+                            type="tel"
+                            id="phone"
                             name="phone"
                             maxlength="30"
                             placeholder="Enter your phone number"
-                            autocomplete="tel" required>
+                            autocomplete="tel"
+                            required
+                        >
                     </div>
 
                     <div class="form-group full-width">
                         <label for="special_requests">Special Requests</label>
-                        <textarea id="special_requests"
+
+                        <textarea
+                            id="special_requests"
                             name="special_requests"
                             maxlength="5000"
-                            placeholder="Tell us about any special requests or requirements..."></textarea>
+                            placeholder="Tell us about any special requests or requirements..."
+                        ></textarea>
                     </div>
 
                     <div class="reservation-notice">
                         <i class="fas fa-circle-info"></i>
+
                         Submitting this form is a reservation request only.
                         Your accommodation is not confirmed until our team
-                        contacts you and confirms availability.
+                        reviews your request and confirms availability.
                     </div>
 
-                    <button type="submit" class="reservation-submit">
+                    <div class="reservation-email-notice">
+                        <i class="fas fa-envelope"></i>
+
+                        After submitting your request, you will receive an
+                        email acknowledging receipt. A second email will be
+                        sent when our administrator confirms your reservation.
+                    </div>
+
+                    <button type="submit" class="reservation-submit" id="submitReservation">
                         <i class="fas fa-paper-plane"></i>
                         Submit Reservation Request
                     </button>
@@ -465,7 +519,7 @@ require_once __DIR__ . '/../includes/website_settings.php';
 
             <div class="footer-copyright">
                 <p>
-                    &copy; <span id="current-year">2026</span>
+                    &copy; <?= date('Y') ?>
                     Violet-Lue Suites & Apartments. All Rights Reserved.
                 </p>
             </div>
@@ -475,12 +529,14 @@ require_once __DIR__ . '/../includes/website_settings.php';
 
     <script src="../assets/js/script.js"></script>
 
-    <!-- RESERVATION DATE VALIDATION -->
+    <!-- RESERVATION FORM VALIDATION -->
     <script>
         document.addEventListener("DOMContentLoaded", function () {
 
+            const reservationForm = document.getElementById("reservationForm");
             const checkIn = document.getElementById("check_in");
             const checkOut = document.getElementById("check_out");
+            const submitButton = document.getElementById("submitReservation");
 
             function getLocalDateString() {
                 const today = new Date();
@@ -509,11 +565,40 @@ require_once __DIR__ . '/../includes/website_settings.php';
 
             checkOut.addEventListener("change", function () {
 
-                if (checkOut.value && checkOut.value <= checkIn.value) {
+                if (
+                    checkIn.value &&
+                    checkOut.value &&
+                    checkOut.value <= checkIn.value
+                ) {
                     alert("Check-out date must be later than check-in date.");
                     checkOut.value = "";
                     checkOut.focus();
                 }
+
+            });
+
+            reservationForm.addEventListener("submit", function (event) {
+
+                if (!reservationForm.checkValidity()) {
+                    event.preventDefault();
+                    reservationForm.reportValidity();
+                    return;
+                }
+
+                if (!checkIn.value || !checkOut.value ||
+                    checkOut.value <= checkIn.value) {
+
+                    event.preventDefault();
+
+                    alert("Please select valid check-in and check-out dates.");
+
+                    return;
+                }
+
+                submitButton.disabled = true;
+
+                submitButton.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Submitting Request...';
 
             });
 
