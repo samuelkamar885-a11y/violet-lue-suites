@@ -1,0 +1,47 @@
+# Environment and private credentials
+.env
+.env.*
+!.env.example
+
+# Database credentials
+/config/database.php
+/config/database.local.php
+/config/database.production.php
+
+# Temporary and log files
+*.log
+*.tmp
+*.temp
+*.bak
+*.old
+~*
+
+# Local development files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Private guest information
+/uploads/guests/
+/uploads/documents/
+/uploads/private/
+
+# Uploaded room photos
+/uploads/rooms/*
+!/uploads/rooms/.gitkeep
+
+# Temporary uploads
+/uploads/temp/
+/uploads/tmp/
+
+# PHP sessions
+sess_*
+
+# Backup databases
+*.sql.bak
+*.sql.gz
+
+# Local administrator setup script
+/admin/create_admin.php
