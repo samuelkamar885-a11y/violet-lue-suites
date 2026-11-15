@@ -316,7 +316,7 @@ require_once __DIR__ . '/includes/website_settings.php';
             <p>Secure<br>Parking</p>
         </div>
 
-        <div class="facility-item">
+        <div class="facility-item">>
             <i class="fas fa-utensils"></i>
             <p>Restaurant &<br>Dining</p>
         </div>
