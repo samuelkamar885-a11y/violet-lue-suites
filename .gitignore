@@ -45,3 +45,8 @@ sess_*
 
 # Local administrator setup script
 /admin/create_admin.php
+# Private email configuration
+/config/mail.php
+
+# Private database export
+/database/violet_lue_db.sql
